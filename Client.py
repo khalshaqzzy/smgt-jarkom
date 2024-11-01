@@ -5,17 +5,17 @@ import tkinter as tk
 from tkinter import scrolledtext, messagebox
 
 def rc4(key, data):
+    """Fungsi untuk mengenkripsi dan mendekripsi data menggunakan RC4."""
     S = list(range(256))
     j = 0
     key_length = len(key)
+    key = [ord(c) for c in key]
     # Key Scheduling Algorithm (KSA)
     for i in range(256):
         j = (j + S[i] + key[i % key_length]) % 256
         S[i], S[j] = S[j], S[i]
-
     # Pseudo-Random Generation Algorithm (PRGA)
-    i = 0
-    j = 0
+    i = j = 0
     result = bytearray()
     for byte in data:
         i = (i + 1) % 256
@@ -24,6 +24,24 @@ def rc4(key, data):
         K = S[(S[i] + S[j]) % 256]
         result.append(byte ^ K)
     return bytes(result)
+
+def simple_hash(message):
+    """Fungsi hash sederhana untuk membuat checksum pesan."""
+    hash_value = 0
+    for c in message:
+        hash_value = (hash_value * 31 + ord(c)) % (2**32)
+    return hash_value
+
+def sign_message(secret_key, message):
+    """Membuat tanda tangan digital menggunakan kunci rahasia dan pesan."""
+    combined = secret_key + message
+    signature = simple_hash(combined)
+    return signature
+
+def verify_signature(secret_key, message, signature):
+    """Memverifikasi tanda tangan digital."""
+    expected_signature = sign_message(secret_key, message)
+    return expected_signature == signature
 
 class ChatClient:
     def __init__(self, master):
@@ -39,18 +57,22 @@ class ChatClient:
         self.outgoing_queue = queue.Queue()
 
         self.current_chatroom = None
-        self.username = None  # Store the username after login
+        self.username = None  # Menyimpan username setelah login
 
-        # Apply pastel color theme
-        self.bg_color = '#FDFD96'  # Light Pastel Yellow
-        self.fg_color = '#355C7D'  # Dark Pastel Blue
-        self.btn_color = '#A8E6CF'  # Light Pastel Green
+        # Kunci untuk enkripsi signature
+        self.secret_key = 'cintajarkom'
+
+  
+        self.bg_color = '#FDFD96'  
+        self.fg_color = '#355C7D'  
+        self.btn_color = '#A8E6CF'
 
         self.master.configure(bg=self.bg_color)
 
         self.create_connection_window()
 
     def create_connection_window(self):
+        """Membuat jendela untuk memasukkan IP dan Port server."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -70,6 +92,7 @@ class ChatClient:
         frame.grid_columnconfigure(1, weight=1)
 
     def connect_to_server(self):
+        """Menghubungkan client ke server."""
         self.server_ip = self.server_ip_entry.get()
         self.server_port = int(self.server_port_entry.get())
         self.server_address = (self.server_ip, self.server_port)
@@ -78,7 +101,7 @@ class ChatClient:
         client_ip, client_port = self.client_socket.getsockname()
         print(f"Client dimulai di {client_ip}:{client_port}")
 
-        # Mulai thread untuk menerima dan memproses pesan
+        # Memulai thread
         threading.Thread(target=self.receive_messages, daemon=True).start()
         threading.Thread(target=self.process_incoming_messages, daemon=True).start()
         threading.Thread(target=self.send_messages, daemon=True).start()
@@ -86,6 +109,7 @@ class ChatClient:
         self.create_main_menu()
 
     def create_main_menu(self):
+        """Membuat menu utama."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -107,6 +131,7 @@ class ChatClient:
         frame.grid_columnconfigure(0, weight=1)
 
     def register_window(self):
+        """Membuat jendela registrasi."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -125,6 +150,7 @@ class ChatClient:
         tk.Button(frame, text="Back", command=self.create_main_menu, bg=self.btn_color).grid(row=4, column=0, columnspan=2, pady=5)
 
     def login_window(self):
+        """Membuat jendela login."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -143,6 +169,7 @@ class ChatClient:
         tk.Button(frame, text="Back", command=self.create_main_menu, bg=self.btn_color).grid(row=4, column=0, columnspan=2, pady=5)
 
     def create_chatroom_window(self):
+        """Membuat jendela untuk membuat chatroom."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -161,6 +188,7 @@ class ChatClient:
         tk.Button(frame, text="Back", command=self.create_main_menu, bg=self.btn_color).grid(row=4, column=0, columnspan=2, pady=5)
 
     def join_chatroom_window(self):
+        """Membuat jendela untuk bergabung ke chatroom."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
@@ -179,16 +207,15 @@ class ChatClient:
         tk.Button(frame, text="Back", command=self.create_main_menu, bg=self.btn_color).grid(row=4, column=0, columnspan=2, pady=5)
 
     def chatroom_window(self):
+        """Membuat jendela chatroom."""
         self.clear_window()
         self.master.configure(bg=self.bg_color)
 
         top_frame = tk.Frame(self.master, bg=self.bg_color)
         top_frame.pack(fill='x')
 
-        # Display username in the top-left corner
         tk.Label(top_frame, text=f"User: {self.username}", bg=self.bg_color, fg=self.fg_color, anchor='w').pack(side='left', padx=10)
 
-        # Display chatroom name in the center
         tk.Label(top_frame, text=f"Chatroom: {self.current_chatroom}", bg=self.bg_color, fg=self.fg_color, font=('Helvetica', 16)).pack(side='top', pady=5)
 
         main_frame = tk.Frame(self.master, bg=self.bg_color)
@@ -205,19 +232,38 @@ class ChatClient:
         tk.Button(button_frame, text="Back", command=self.leave_chatroom, bg=self.btn_color).pack(side='left', padx=5)
 
     def clear_window(self):
+        """Menghapus semua widget di jendela."""
         for widget in self.master.winfo_children():
             widget.destroy()
 
     def receive_messages(self):
+        """Menerima pesan dari server."""
         while True:
-            data, addr = self.client_socket.recvfrom(4096)
+            data, addr = self.client_socket.recvfrom(65536)
             self.incoming_queue.put(data)
 
     def process_incoming_messages(self):
+        """Memproses pesan yang diterima dari server."""
         while True:
             data = self.incoming_queue.get()
-            decrypted_data = rc4('mysecretkey'.encode(), data)
-            message = decrypted_data.decode()
+            try:
+                decrypted_data = data.decode()
+                encrypted_data_str, signature_str = decrypted_data.split('|')
+                encrypted_data = bytes.fromhex(encrypted_data_str)
+                signature = int(signature_str)
+            except Exception as e:
+                print("Format data yang diterima tidak valid.")
+                continue
+
+            # Dekripsi data menggunakan RC4
+            decrypted_message = rc4(self.secret_key, encrypted_data).decode()
+
+            # Verifikasi signature
+            if not verify_signature(self.secret_key, decrypted_message, signature):
+                messagebox.showerror("Error", "Verifikasi tanda tangan gagal untuk pesan yang diterima.")
+                continue
+
+            message = decrypted_message
             parts = message.split('|')
             command = parts[0]
             if command == 'REGISTER_SUCCESS':
@@ -268,40 +314,49 @@ class ChatClient:
                 print("Pesan tidak dikenal:", message)
 
     def send_messages(self):
+        """Mengirim pesan ke server."""
         while True:
             message = self.outgoing_queue.get()
-            encrypted_message = rc4('mysecretkey'.encode(), message.encode())
-            self.client_socket.sendto(encrypted_message, self.server_address)
+            encrypted_message = rc4(self.secret_key, message.encode()).hex()
+            signature = sign_message(self.secret_key, message)
+            data = f"{encrypted_message}|{signature}"
+            self.client_socket.sendto(data.encode(), self.server_address)
 
     def register(self):
+        """Fungsi untuk registrasi."""
         username = self.register_username.get()
         password = self.register_password.get()
         message = f'REGISTER|{username}|{password}'
         self.outgoing_queue.put(message)
 
     def login(self):
+        """Fungsi untuk login."""
         username = self.login_username.get()
         password = self.login_password.get()
         message = f'LOGIN|{username}|{password}'
         self.outgoing_queue.put(message)
 
     def create_chatroom(self):
+        """Fungsi untuk membuat chatroom."""
         chatroom_name = self.create_chatroom_name.get()
         chatroom_password = self.create_chatroom_password.get()
         message = f'CREATE_CHATROOM|{chatroom_name}|{chatroom_password}'
         self.outgoing_queue.put(message)
 
     def join_chatroom(self):
+        """Fungsi untuk bergabung ke chatroom."""
         chatroom_name = self.join_chatroom_name.get()
         chatroom_password = self.join_chatroom_password.get()
         message = f'JOIN_CHATROOM|{chatroom_name}|{chatroom_password}'
         self.outgoing_queue.put(message)
 
     def leave_chatroom(self):
+        """Fungsi untuk meninggalkan chatroom."""
         message = 'LEAVE_CHATROOM'
         self.outgoing_queue.put(message)
 
     def send_chat_message(self, event=None):
+        """Mengirim pesan chat."""
         message_text = self.message_entry.get()
         if message_text.strip() == '':
             return
@@ -310,6 +365,7 @@ class ChatClient:
         self.message_entry.delete(0, tk.END)
 
     def logout(self):
+        """Fungsi untuk logout."""
         message = 'LOGOUT'
         self.outgoing_queue.put(message)
         self.username = None
